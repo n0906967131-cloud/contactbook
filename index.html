@@ -380,7 +380,7 @@
                     </div>
                     <div class="flex justify-end gap-3 pt-2">
                         <button type="button" onclick="UI.closeModal('entry-modal')" class="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 transition border border-dashed border-white/10">取消</button>
-                        <button id="entry-save-btn" type="submit" class="bg-ao text-washi px-6 py-2 rounded hover:bg-ao-dark transition font-bold">儲存</button>
+                        <button type="submit" class="bg-ao text-washi px-6 py-2 rounded hover:bg-ao-dark transition font-bold">儲存</button>
                     </div>
                 </form>
             </div>
@@ -596,10 +596,6 @@
                 if(id === 'entry-modal') {
                     document.getElementById('entry-form').reset();
                     document.getElementById('entry-content').innerHTML = ''; // 清空編輯器
-                    document.getElementById('entry-id').value = '';
-                    document.getElementById('entry-modal-title').textContent = '新增聯絡簿';
-                    const saveBtn = document.getElementById('entry-save-btn');
-                    if (saveBtn) saveBtn.textContent = '儲存';
                 }
                 if(id === 'login-modal') document.getElementById('login-form').reset();
                 if(id === 'password-modal') document.getElementById('password-form').reset();
@@ -845,20 +841,11 @@ const firebaseConfig = {
             deleteUser: async (id) => {
                 if (!State.currentUser || State.currentUser.role !== 'admin') return;
                 if(State.currentUser.id === id) return UI.showToast("無法刪除自己", true);
-
-                const user = State.users.find(u => u.id === id);
-                const userName = user?.name || user?.account || '這個帳號';
-
-                if (!window.confirm(`確定要刪除「${userName}」的帳號嗎？\n\n刪除後將無法復原。`)) return;
-
+                
                 try {
                     await API.deleteDoc('users', id);
                     UI.showToast("帳號已刪除");
-                } catch(e) {
-                    console.error("刪除帳號失敗:", e);
-                    UI.showToast("刪除失敗", true);
-                }
-            } catch(e) { UI.showToast("刪除失敗", true); }
+                } catch(e) { UI.showToast("刪除失敗", true); }
             }
         };
 
@@ -1097,81 +1084,51 @@ const firebaseConfig = {
             
             saveEntry: async () => {
                 if (State.isGuest) return;
-
-                const id = document.getElementById('entry-id').value.trim();
+                
+                const id = document.getElementById('entry-id').value;
                 const date = document.getElementById('entry-date').value;
-                let content = document.getElementById('entry-content').innerHTML;
+                let content = document.getElementById('entry-content').innerHTML; 
                 content = App.convertFontToSpan(content);
-
+                
                 const selectedTags = State.tags
                     .filter(t => content.includes(`【${t.name}】`))
                     .map(t => t.id);
 
-                // 修改時不寫入 views: undefined，避免 Firestore 拒絕更新。
                 const data = {
-                    date,
-                    content,
-                    tags: selectedTags,
+                    date, content, tags: selectedTags,
                     authorId: State.currentUser.id,
                     authorName: State.currentUser.name,
-                    timestamp: new Date().getTime()
+                    timestamp: new Date().getTime(),
+                    views: id ? undefined : 0 // 新增時預設 0 人次
                 };
-
-                // 只有新增資料才建立瀏覽人次；修改時保留原本 views。
-                if (!id) {
-                    data.views = 0;
-                }
 
                 try {
                     if (id) {
                         await API.updateDoc('entries', id, data);
-                        UI.showToast("聯絡簿已更新");
+                        UI.showToast("更新成功");
                     } else {
                         await API.addDoc('entries', data);
-                        UI.showToast("聯絡簿新增成功");
+                        UI.showToast("新增成功");
                     }
                     UI.closeModal('entry-modal');
-                } catch (e) {
-                    console.error("儲存聯絡簿失敗:", e);
-                    UI.showToast("儲存失敗，請稍後再試", true);
-                }
+                } catch (e) { UI.showToast("儲存失敗", true); }
             },
             editEntry: (id) => {
                 const entry = State.entries.find(e => e.id === id);
                 if(!entry) return;
-
-                // 先保留原本的 document ID，確保儲存時使用 updateDoc。
+                
                 document.getElementById('entry-id').value = entry.id;
-                document.getElementById('entry-date').value = entry.date || '';
-                document.getElementById('entry-content').innerHTML = entry.content || '';
-
-                document.getElementById('entry-modal-title').textContent = "修改聯絡簿";
-                const saveBtn = document.getElementById('entry-save-btn');
-                if (saveBtn) saveBtn.textContent = "儲存修改";
-
+                document.getElementById('entry-date').value = entry.date;
+                document.getElementById('entry-content').innerHTML = entry.content;
+                
                 UI.openModal('entry-modal');
+                document.getElementById('entry-modal-title').textContent = "修改聯絡簿";
             },
             deleteEntry: async (id) => {
-                const entry = State.entries.find(e => e.id === id);
-                if (!entry) return;
-
-                const dateText = entry.date
-                    ? `${UI.toMinguo(entry.date)} ${UI.getWeekdayStr(entry.date)}`
-                    : '這筆';
-
-                const confirmed = window.confirm(
-                    `確定要刪除 ${dateText} 的聯絡簿嗎？\n\n刪除後將無法復原。`
-                );
-
-                if (!confirmed) return;
-
                 try {
                     await API.deleteDoc('entries', id);
-                    UI.showToast("聯絡簿已刪除");
-                } catch (e) {
-                    console.error("刪除聯絡簿失敗:", e);
-                    UI.showToast("刪除失敗", true);
-                }
+                    UI.showToast("已刪除");
+                } catch (e) { UI.showToast("刪除失敗", true); }
             },
             renderSystem: () => {
                 if (!State.system) return;
@@ -1455,17 +1412,8 @@ const firebaseConfig = {
             },
             deleteLink: async (id) => {
                 if(!State.currentUser || State.currentUser.role !== 'admin') return;
-                const link = State.links.find(l => l.id === id);
-                const title = link?.title || '這項資源';
-                if (!window.confirm(`確定要刪除「${title}」嗎？\n\n刪除後將無法復原。`)) return;
-
-                try {
-                    await API.deleteDoc('links', id);
-                    UI.showToast("已刪除資源");
-                } catch(e) {
-                    console.error("刪除資源失敗:", e);
-                    UI.showToast("刪除失敗", true);
-                }
+                try { await API.deleteDoc('links', id); UI.showToast("已刪除資源"); } 
+                catch(e) { UI.showToast("刪除失敗", true); }
             },
             recordLinkView: async (id, url) => {
                 const link = State.links.find(l => l.id === id);
@@ -1541,17 +1489,8 @@ const firebaseConfig = {
             },
             deleteTag: async (id) => {
                 if(!State.currentUser || State.currentUser.role !== 'admin') return;
-                const tag = State.tags.find(t => t.id === id);
-                const tagName = tag?.name || '這個標籤';
-                if (!window.confirm(`確定要刪除「${tagName}」標籤嗎？\n\n刪除後將無法復原。`)) return;
-
-                try {
-                    await API.deleteDoc('tags', id);
-                    UI.showToast("標籤已刪除");
-                } catch(e) {
-                    console.error("刪除標籤失敗:", e);
-                    UI.showToast("刪除失敗", true);
-                }
+                try { await API.deleteDoc('tags', id); UI.showToast("標籤已刪除"); } 
+                catch(e) { UI.showToast("刪除失敗", true); }
             },
             renderTagCheckboxes: () => {
                 const entryContainer = document.getElementById('entry-tags-container');
