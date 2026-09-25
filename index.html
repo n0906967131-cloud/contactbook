@@ -1099,8 +1099,10 @@ const firebaseConfig = {
                     authorId: State.currentUser.id,
                     authorName: State.currentUser.name,
                     timestamp: new Date().getTime(),
-                    views: id ? undefined : 0 // 新增時預設 0 人次
                 };
+                if (!id) {
+    data.views = 0;
+}
 
                 try {
                     if (id) {
@@ -1125,11 +1127,15 @@ const firebaseConfig = {
                 document.getElementById('entry-modal-title').textContent = "修改聯絡簿";
             },
             deleteEntry: async (id) => {
-                try {
-                    await API.deleteDoc('entries', id);
-                    UI.showToast("已刪除");
-                } catch (e) { UI.showToast("刪除失敗", true); }
-            },
+    if (!window.confirm("確定要刪除這筆聯絡簿嗎？\n\n刪除後將無法復原。")) {
+        return;
+    }
+
+    try {
+        await API.deleteDoc('entries', id);
+        UI.showToast("已刪除");
+    } catch (e) { UI.showToast("刪除失敗", true); }
+},
             renderSystem: () => {
                 if (!State.system) return;
                 const systemTitle = State.system.title || '和風學園 網路聯絡簿';
